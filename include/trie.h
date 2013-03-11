@@ -20,10 +20,10 @@ extern int  load_trie_dict(const char*dict_file, int flag = 0);
 // 查找key的值，如果存在，返回写到val里
 extern void get_val(const char*key, char*val);
 
-
 // 打印整个trie树
 extern void print_trie();
 
 // 保存trie到二进制格式
+// 
 extern int save_trie();
 

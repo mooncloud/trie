@@ -15,6 +15,7 @@ int g_total_node_num  = 0;
 int g_delete_node_num = 0;
 int g_save_node_num   = 0;
 int g_read_node_num   = 0;
+int g_has_load_trie   = 0;
 
 struct trie {
   unsigned char data;        // 字母的ascall码
@@ -29,9 +30,14 @@ struct trie {
 // 深度优先遍历整个trie树
 void dfs_traverse(trie*root);
 
-// 改变存储格式，有链表，改成数组+链表，便于在查找的时候使用
-// 二分查找，其实是一种B+树结构
+// 改变存储格式，原来的兄弟，是链表，方便插入，但查找效率低下。
+// 现在改成用数组存储兄弟，而每个节点还会保留孩子指针，便于在查找的时候使用
+// 二分查找
 int  shift_storage_format();
+
+// 插入trie树词典
+int insert_trie_dict(char* key, char*val);
+
 
 // 递归的从二进制文件中读入trie树，要用到文件定位函数fseek
 int recursion_read_binary_trie(trie*root, FILE*fp) {
@@ -40,16 +46,22 @@ int recursion_read_binary_trie(trie*root, FILE*fp) {
   }
   int m_child_num = root->child_num;
   root->p_child = new trie[m_child_num];
+  if ( NULL == root->p_child ) {
+    return -1;
+  }
   memset(root->p_child, 0, sizeof(trie)*m_child_num);
+  
   int m_read_num = fread(root->p_child, sizeof(trie), m_child_num, fp);
   if ( m_read_num != m_child_num ) {
     return -1;
   }
   g_read_node_num += m_read_num;
+  
   int m_seek_suc = fseek(fp, g_read_node_num*sizeof(trie), SEEK_SET);
   if ( 0 != m_seek_suc ) {
     return -1;
-  } 
+  }
+  
   int m_ret = 0;
   for ( int i = 0; i < m_child_num; ++i ) {
     m_ret =  recursion_read_binary_trie(root->p_child+i, fp);
@@ -57,6 +69,7 @@ int recursion_read_binary_trie(trie*root, FILE*fp) {
       break;
     }
   }
+  
   return m_ret;
 }
 
@@ -65,18 +78,21 @@ int load_binary_trie_model(const char*binary_trie_file) {
   if ( NULL == binary_trie_file ) {
     return -1;
   }
+  
   FILE*fp = fopen(binary_trie_file, "r");
   if ( NULL == fp ) {
     fprintf(stderr, "[open %s failed]\n", fp);
     fclose(fp);
     return -1;
   }
+  
   int m_read_num = fread(p_dict, sizeof(trie), 1, fp);
   if ( m_read_num != 1 ) {
     fclose(fp);
     return -1;
   }
   g_read_node_num++;
+  
   int m_seek_suc = fseek(fp, g_read_node_num*sizeof(trie), SEEK_SET);
   if ( 0 != m_seek_suc ) {
     return -1;
@@ -110,6 +126,7 @@ int load_text_trie_model(const char*text_trie_file) {
     fprintf(stderr, "[open %s failed]\n", text_trie_file);
     return -1;
   }
+  
   char m_key[1024] = {0};
   char m_val[1024] = {0};
   char m_line[10240] = {0};
@@ -152,8 +169,11 @@ int shift_storage_format() {
   }
   trie*p_dest = new trie;
   memcpy(p_dest, p_dict, sizeof(trie));
+  
   shift_list_to_array(p_dest, p_dict);
+  
   unload_trie_list(p_dict);
+  
 #ifdef DEBUG
   fprintf(stderr, "g_delete_node_num:%d\n", g_delete_node_num); 
 #endif
@@ -161,15 +181,18 @@ int shift_storage_format() {
   return 0;
 }
 
+// trie树保存成二进制化
 int save_to_binary(trie*p_child, int m_child_num, FILE*fp) {
   if (NULL == p_child || 0 >= m_child_num) {
     return 0;
   }
+  
   g_save_node_num += m_child_num;
   int m_write_num = fwrite(p_child, sizeof(trie), m_child_num, fp);
   if ( m_write_num != m_child_num ) {
     return -1;
   }
+  
   int m_rev = 0;
   for (int i = 0; i < m_child_num; ++i) {
     m_rev = save_to_binary(p_child[i].p_child, p_child[i].child_num, fp);
@@ -177,8 +200,10 @@ int save_to_binary(trie*p_child, int m_child_num, FILE*fp) {
       break;
     }
   }
+  
   return m_rev;
 }
+
 
 int save_trie() {
   if (NULL == p_dict) {
@@ -386,6 +411,10 @@ int load_trie_dict(const char*dict_file, int flag) {
   if (NULL == dict_file) {
     return -1;
   }
+  if ( g_has_load_trie ) {
+    return 0;
+  }
+  
   int m_ret = 0;
   switch (flag) {
     case 0: {
@@ -399,6 +428,10 @@ int load_trie_dict(const char*dict_file, int flag) {
     default:
            break;
   }
+  if ( 0 == m_ret ) {
+    g_has_load_trie = 1;
+  }
+  
   return m_ret;
 }
 
